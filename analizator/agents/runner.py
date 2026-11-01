@@ -50,7 +50,13 @@ class AgentResult:
     output: Any = None
 
 
+class AgentBackend(Protocol):
+    def run(self, spec: AgentSpec, task: str, registry: ToolRegistry) -> AgentResult: ...
+
+
 class AgentRunner:
+    """API backend: drives the Messages API tool loop and calls registry tools on demand."""
+
     def __init__(self, llm: LLMClient, max_turns: int = 30, max_tokens: int = 64_000):
         self._llm = llm
         self._max_turns = max_turns

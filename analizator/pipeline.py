@@ -9,7 +9,7 @@ from datetime import date
 from importlib.resources import files
 from pathlib import Path
 
-from analizator.agents.runner import AgentRunner, AgentSpec
+from analizator.agents.runner import AgentBackend, AgentSpec
 from analizator.agents.schema import SUBMIT_CLAIMS_TOOL, Claim, ClaimSet
 from analizator.config import ANALYST_MODEL, JUDGE_MODEL
 from analizator.data.edgar import EdgarClient
@@ -26,15 +26,18 @@ class Pipeline:
         self,
         edgar: EdgarClient,
         store: FactStore,
-        runner: AgentRunner,
+        runner: AgentBackend,
         reports_dir: Path,
         today: Callable[[], date] = date.today,
+        max_workers: int = 2,
     ):
         self._edgar = edgar
         self._store = store
         self._runner = runner
         self._reports_dir = reports_dir
         self._today = today
+        # 1 runs bull and bear one after the other (lower memory use).
+        self._max_workers = max_workers
 
     def run(self, ticker: str) -> Path:
         company = self._edgar.company(ticker)
@@ -80,7 +83,7 @@ class Pipeline:
         return path
 
     def _run_pair(self, first, second, registry, prefixes) -> tuple[list[Claim], list[Claim]]:
-        with ThreadPoolExecutor(max_workers=2) as pool:
+        with ThreadPoolExecutor(max_workers=self._max_workers) as pool:
             futures = [pool.submit(self._runner.run, spec, task, registry) for spec, task in (first, second)]
             results = [f.result().output for f in futures]
         return tuple(_label(r.claims, p) for r, p in zip(results, prefixes))

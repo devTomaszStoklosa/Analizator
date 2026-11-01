@@ -18,6 +18,8 @@ WEB_FETCH = {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 10}
 class Tool:
     definition: dict
     handler: Callable[[dict], str]
+    # Inputs to run up front for backends that cannot call tools during the turn.
+    prefetch: tuple[dict, ...] = ()
 
 
 class ToolRegistry:
@@ -33,6 +35,14 @@ class ToolRegistry:
         if tool is None:
             raise KeyError(f"Unknown tool: {name}")
         return tool.handler(tool_input)
+
+    def prefetched(self) -> list[tuple[str, dict, str]]:
+        """(tool name, input, output) for every prefetch input."""
+        return [
+            (name, tool_input, tool.handler(tool_input))
+            for name, tool in self._tools.items()
+            for tool_input in tool.prefetch
+        ]
 
 
 def financial_tools(store: FactStore, ticker: str) -> list[Tool]:
@@ -57,6 +67,7 @@ def financial_tools(store: FactStore, ticker: str) -> list[Tool]:
                 "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
             },
             handler=get_metrics,
+            prefetch=({},),
         ),
         Tool(
             definition={
@@ -73,5 +84,6 @@ def financial_tools(store: FactStore, ticker: str) -> list[Tool]:
                 },
             },
             handler=get_raw_series,
+            prefetch=tuple({"concept": c} for c in CONCEPTS),
         ),
     ]
